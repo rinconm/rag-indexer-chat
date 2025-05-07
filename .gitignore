@@ -1,0 +1,25 @@
+# Python cache & build artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment
+.env
+.venv/
+
+# Index + DB artifacts
+/index/*.db
+/index/.index_cache.json
+
+# Logs
+*.log
+
+# OS junk
+.DS_Store
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo

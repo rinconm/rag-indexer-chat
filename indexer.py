@@ -35,21 +35,20 @@ except ImportError:
     # fallback for older versions
     IndexNotFoundError = Exception
 
-from sqlite_kvstore import SQLiteKVStore
-from sqlite_docstore import SQLiteDocStore
-from sqlite_indexstore import SQLiteIndexStore
-from sqlite_vectorstore import SQLiteVectorStore
-from sqlite_graphstore import SQLiteGraphStore
+from backend.sqlite_kvstore import SQLiteKVStore
+from backend.sqlite_docstore import SQLiteDocStore
+from backend.sqlite_indexstore import SQLiteIndexStore
+from backend.sqlite_vectorstore import SQLiteVectorStore
+from backend.sqlite_graphstore import SQLiteGraphStore
 
 # --- LlamaIndex Global Settings ---
 from llama_index.core.settings import Settings
 
 @dataclass(frozen=True)
 class Config:
-    """Configuration class for RAG Indexer."""
-    index_dir: Path = Path("./index")
-    sqlite_path: Path = index_dir / "sqlite.db"
-    cache_path: Path = Path(".index_cache.json")
+    index_dir   : Path = Path("./index")
+    sqlite_path : Path = index_dir / "sqlite.db"
+    cache_path  : Path = index_dir / ".index_cache.json"
     supported_extensions: frozenset = frozenset({
         ".py", ".sh", ".md", ".txt", ".yaml", ".yml", ".json",
         ".html", ".js", ".ts", ".css", ".java", ".cpp", ".c", ".go"
@@ -234,11 +233,11 @@ def main() -> None:
             storage_context = StorageContext.from_defaults(
                 docstore=docstore,
                 index_store=SQLiteIndexStore(str(Config.sqlite_path)),
-                kvstore=kvstore,
                 vector_store=vector_store,
                 graph_store=SQLiteGraphStore(str(Config.sqlite_path)),
                 persist_dir=None,
             )
+            storage_context.kvstore = kvstore
 
             assert hasattr(docstore, 'get_all_docs'), "Custom SQLiteDocStore is not being used!"
             log.debug(f"KVStore 'last_index_run': {storage_context.kvstore['last_index_run']}")
@@ -262,6 +261,8 @@ def main() -> None:
                 )
 
             docstore.add_documents(new_docs)
+            storage_context.index_store.add_index_struct(index.index_struct)
+            storage_context.index_store.persist()        # commits the change
             all_docs = docstore.get_all_docs()
             kvstore["total_docs"] = len(all_docs)
 

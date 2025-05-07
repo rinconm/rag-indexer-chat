@@ -7,6 +7,7 @@ import json
 import signal
 import logging
 import argparse
+import re
 from pathlib import Path
 from dataclasses import dataclass
 from typing import List, Tuple, Optional, Any
@@ -19,29 +20,31 @@ from rich.prompt import Prompt
 from rich.panel import Panel
 from rich.markdown import Markdown
 from rich.logging import RichHandler
-from llama_index.core import StorageContext, load_index_from_storage, Settings
+from llama_index.core import StorageContext, Settings, VectorStoreIndex
 from llama_index.llms.ollama import Ollama
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.core.retrievers import VectorIndexRetriever
-from llama_index.core.vector_stores.types import VectorStoreQuery
+from llama_index.core.vector_stores.types import VectorStoreQuery, VectorStoreQueryMode
 from llama_index.core.schema import Node
 from llama_index.core.vector_stores.types import MetadataFilter, MetadataFilters
 from transformers import GPT2TokenizerFast
 
 # Local SQLite Storage
-from sqlite_docstore import SQLiteDocStore
-from sqlite_indexstore import SQLiteIndexStore
-from sqlite_vectorstore import SQLiteVectorStore
+from backend.sqlite_docstore import SQLiteDocStore
+from backend.sqlite_indexstore import SQLiteIndexStore
+from backend.sqlite_vectorstore import SQLiteVectorStore
 
 
 console = Console()
 log = logging.getLogger(__name__)
+FILENAME_RE = re.compile(r"\b[\w\-/]+\.\w+\b")
 
 @dataclass(frozen=True)
 class Config:
     VERSION = "1.0.0"
     index_dir: Path = Path("./index")
     sqlite_path: Path = index_dir / "sqlite.db"
+    chatlog_dir  : Path = Path("./chat_logs")
     system_prompt = "You are a helpful assistant answering questions about local project files concisely and accurately."
 
 class HybridRetriever(VectorIndexRetriever):
@@ -52,9 +55,13 @@ class HybridRetriever(VectorIndexRetriever):
         log.debug(f"HybridRetriever running query: '{query_str}'")
         log.debug(f"Filters used: {[k for k in query_str.lower().split()]}")
 
+        embedding = Settings.embed_model.get_text_embedding(query_str)
+
         query = VectorStoreQuery(
             query_str=query_str,
-            filters=MetadataFilters(filters=[MetadataFilter(key="keywords", value=k) for k in query_str.lower().split()]),
+            query_embedding=embedding,
+            mode=VectorStoreQueryMode.DEFAULT,
+            #filters=MetadataFilters(filters=[MetadataFilter(key="keywords", value=k) for k in query_str.lower().split()]),
         )
         results = self._index.vector_store.query(query)
         log.debug(f"Scores: {[r.score for r in results.nodes or []]}")
@@ -64,7 +71,11 @@ class HybridRetriever(VectorIndexRetriever):
 
         if not results.nodes:
             log.debug("Trying fallback: pure embedding query")
-            results = self._index.vector_store.query(VectorStoreQuery(query_str=query_str))
+            results = self._index.vector_store.query(
+                VectorStoreQuery(query_str=query_str,
+                query_embedding=embedding,
+                mode=VectorStoreQueryMode.DEFAULT)
+           )
 
         return [self._node_postprocess(r) for r in results.nodes or []]
 
@@ -93,25 +104,41 @@ def build_metadata(args: argparse.Namespace, history: List[Tuple[str, str]]) -> 
     }
 
 def load_storage() -> Tuple[StorageContext, Any]:
-    """Load storage context and retrieve index."""
     storage = StorageContext.from_defaults(
         docstore=SQLiteDocStore(str(Config.sqlite_path)),
         index_store=SQLiteIndexStore(str(Config.sqlite_path)),
         vector_store=SQLiteVectorStore(str(Config.sqlite_path)),
     )
 
-    # Load the first available index
     index_structs = storage.index_store.get_index_structs_dict()
     if not index_structs:
-        raise ValueError("No index found in index store")
+        log.warning("Index store empty – reconstructing from vector store")
+        index = VectorStoreIndex.from_vector_store(           # ← instant rebuild
+            vector_store=storage.vector_store,
+            storage_context=storage,
+        )
+        storage.index_store.add_index_struct(index.index_struct)
+        storage.index_store.persist()
+        return storage, index
 
     index_id = next(iter(index_structs))
-    log.debug(f"Loading index ID: {index_id}")
-    index = storage.index_store.get_index(index_id)
+    return storage, storage.index_store.get_index(index_id)
 
-    return storage, index
+def filename_in_query(q: str, files: set[str]) -> str | None:
+    for token in FILENAME_RE.findall(q):
+        if token in files:
+            return token
+        return None
 
 def get_nodes(user_input: str, filenames: set[str], indexed_nodes: List[Node], retriever: HybridRetriever) -> List[Node]:
+    fname = filename_in_query(user_input, filenames)
+    if fname:
+        nodes = [n for n in indexed_nodes
+                if Path(n.metadata.get("filename", "unknown")).name == fname]
+        if log.level == logging.DEBUG:
+            console.print(f":page_facing_up: [cyan]Using file match:[/] {fname}")
+        return nodes
+
     """Retrieve nodes from either filename match or search."""
     if user_input.strip() in filenames:
         nodes = [node for node in indexed_nodes if Path(node.metadata.get("filename", "unknown")).name == user_input.strip()]
@@ -144,9 +171,6 @@ def chat_loop(index: Any, retriever: HybridRetriever, system_prompt: str, args: 
     history: List[Tuple[str, str]] = []
     chatlog_updated = False  # track save status
     tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
-
-    console.print(Panel("[bold green]Chat ready![/]\nType [bold cyan]exit[/] to quit.", title="[bold blue]RAG Chat Interface"))
-    console.print("[yellow]Hint:[/] Type [cyan]/help[/] for commands.")
 
     try:
         while True:
@@ -204,7 +228,6 @@ def chat_loop(index: Any, retriever: HybridRetriever, system_prompt: str, args: 
 
                 case "/save":
                     if chatlog_updated:
-                        args.chatlog.parent.mkdir(parents=True, exist_ok=True)
                         args.chatlog.write_text(json.dumps({"history": history, "meta": build_metadata(args, history)}, indent=2))
                         console.print(f"[yellow]Chat history saved to:[/] {args.chatlog}")
                     else:
@@ -232,12 +255,18 @@ def chat_loop(index: Any, retriever: HybridRetriever, system_prompt: str, args: 
             start = time.perf_counter()
             nodes = get_nodes(user_input, filenames, indexed_nodes, retriever)
             if not nodes:
-                console.print("[yellow]No relevant context found. Proceeding without context.[/]")
+                if log.level == logging.DEBUG:
+                    console.print("[yellow]No relevant context found. Proceeding without context.[/]")
             elapsed = time.perf_counter() - start
-            log.info(f"Retrieved {len(nodes)} nodes in {elapsed:.2f}s")
+            log.debug(f"Retrieved {len(nodes)} nodes in {elapsed:.2f}s")
 
-            retrieved_filenames = extract_filenames(nodes)
-            console.print(f"[green]Retrieved {len(nodes)} chunk(s) from {len(retrieved_filenames)} file(s): {', '.join(retrieved_filenames) or 'none'} in {elapsed:.2f}s | Top K: {retriever.similarity_top_k}")
+            retrieved_filenames = extract_filenames(nodes)            
+            if log.level == logging.DEBUG:
+                console.print(
+                    f"[green]Retrieved {len(nodes)} chunk(s)"
+                    f" from {len(retrieved_filenames)} file(s): "
+                    f"{', '.join(retrieved_filenames) or 'none'} in {elapsed:.2f}s"
+                )
 
             matches = get_close_matches(user_input.strip(), filenames, n=1, cutoff=0.8)
 
@@ -252,7 +281,8 @@ def chat_loop(index: Any, retriever: HybridRetriever, system_prompt: str, args: 
                 display_name = str(filename) if args.verbose else filename.name
                 snippets.append(f"[blue]Chunk {i} ({display_name}):[/] {snippet}...")
 
-            console.print(Panel("\n".join(snippets), title="[bold cyan]Retrieved Context", expand=False))
+            if log.level == logging.DEBUG:
+                console.print(Panel("\n".join(snippets), title="[bold cyan]Retrieved Context", expand=False))
 
             console.rule()
 
@@ -287,9 +317,9 @@ def chat_loop(index: Any, retriever: HybridRetriever, system_prompt: str, args: 
 
             # Save chat history after successful turn
             if args.chatlog:
-                args.chatlog.parent.mkdir(parents=True, exist_ok=True)
                 args.chatlog.write_text(json.dumps({"history": history, "meta": build_metadata(args, history)}, indent=2))
-                console.print(f"[yellow]Chat history auto-saved to:[/] {args.chatlog}")
+                if log.level == logging.DEBUG:
+                    console.print(f"[yellow]Chat history auto-saved to:[/] {args.chatlog}")
                 chatlog_updated = True
 
     except KeyboardInterrupt:
@@ -301,7 +331,6 @@ def chat_loop(index: Any, retriever: HybridRetriever, system_prompt: str, args: 
     finally:
         # Save chat history on exit or crash
         if args.chatlog and history:
-            args.chatlog.parent.mkdir(parents=True, exist_ok=True)
             args.chatlog.write_text(json.dumps({"history": history, "meta": build_metadata(args, history)}, indent=2))
             console.print(f"[yellow]Final chat history auto-saved to:[/] {args.chatlog}")
         console.print()
@@ -343,17 +372,22 @@ def main():
     if args.embed.lower() == args.llm.lower():
         console.print(f"[bold red]Warning:[/] LLM and Embedding model appear to be the same. Are you sure?")
 
+    if not args.debug:
+        logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+        logging.getLogger("transformers").setLevel(logging.WARNING)
+
+        from transformers import logging as hf_logging
+        hf_logging.set_verbosity_error()
+
     configure_settings(llm=args.llm, embed=args.embed)
+
+    Config.chatlog_dir.mkdir(parents=True, exist_ok=True)
 
     console.print(Panel("[bold cyan]Retrieve-Augmented Generator Chat[/]\n[dim]powered by LlamaIndex, Ollama, HuggingFace", style="bold green"))
 
-    console.print(Panel(
-        f"[cyan]LLM:[/] {args.llm} | [cyan]Embeddings:[/] {args.embed} | [cyan]Top K:[/] {args.top_k}",
-        title="[bold blue]RAG Chat Startup"
-    ))
-
     if not args.chatlog:
-        args.chatlog = Path(f"chat_{time.strftime('%Y%m%d_%H%M%S')}.json").resolve()
+        args.chatlog = (Config.chatlog_dir /
+                        f"chat_{time.strftime('%Y%m%d_%H%M%S')}.json").resolve()
 
     system_prompt = Config.system_prompt
 
@@ -362,20 +396,30 @@ def main():
     log.debug(f"Index structs: {len(storage.index_store.get_index_structs_dict())}")
     indexed_nodes = list(storage.docstore.get_all_docs().values())
     filenames = {Path(node.metadata.get("filename", "unknown")).name for node in indexed_nodes}
-    console.print(f"[cyan]Total stored nodes:[/] {len(indexed_nodes)}")
-    for n in indexed_nodes[:5]:
-        console.print(f"Sample node: {n.text[:100]}...")
 
     retriever = HybridRetriever(
         index=index,
         similarity_top_k=args.top_k,
-        vector_store_query_mode="hybrid",
     )
     if not hasattr(index, "as_retriever"):
         raise ValueError("Loaded index does not support retrieval.")
 
-    console.print(f"[green]Loaded index from:[/] {Config.index_dir}")
-    console.print(f"[green]Ready to chat with {len(indexed_nodes)} node(s) from {count_unique_files(indexed_nodes)} file(s).")
+    doc_count   = len(indexed_nodes)
+    file_count  = count_unique_files(indexed_nodes)
+
+    startup_panel = Panel(
+        "\n".join([
+            f"[bold cyan]LLM:[/] {args.llm}   "
+            f"[bold cyan]Embeddings:[/] {args.embed}   "
+            f"[bold cyan]Top K:[/] {args.top_k}   "
+            f"[bold cyan]Docs:[/] {doc_count}   "
+            f"[bold cyan]Files:[/] {file_count}"
+            "\n",
+            "[bold green]Chat ready!  Type [bold cyan]exit[/] to quit or [bold cyan]/help[/] for commands.",
+        ]),
+        title="[bold blue]RAG Chat Startup",
+    )
+    console.print(startup_panel)
 
     chat_loop(index, retriever, system_prompt, args, filenames, indexed_nodes)
 
