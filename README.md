@@ -1,17 +1,17 @@
 # RAG Indexer + Chat Interface
 
-A local-first, privacy-conscious RAG (Retrieval-Augmented Generation) stack built with [LlamaIndex](https://github.com/jerryjliu/llama_index), SQLite, and Python. Designed for indexing directories of source code or documentation and enabling semantic chat over your data.
+A local-first, privacy-conscious RAG (Retrieval-Augmented Generation) stack built with [LlamaIndex](https://github.com/jerryjliu/llama_index), SQLite, and Python. Designed for indexing directories of source code or documentation and enabling semantic chat over your data from the terminal.
 
 ---
 
 ## ✨ Features
 
-- ✅ **Indexing**: Parses and indexes a directory of text/code files.
-- 🧠 **Embedding**: Uses HuggingFace embeddings with support for Mistral via Ollama.
-- 💬 **Chat Interface**: Interact with your indexed data through a simple local chatbot.
-- 💾 **Persistence**: Fully local storage using SQLite for documents, vectors, and index metadata.
-- 📊 **KV Store**: Tracks stats and run metadata (e.g. total files, tokens, index runs).
-- 🔍 **Consistency Checks**: Detect and log discrepancies in document storage/indexing.
+- **Indexing**: Parses and indexes a directory of text/code files.
+- **Embedding**: Uses HuggingFace embeddings with support for Mistral via Ollama.
+- **Chat Interface**: Interact with your indexed data through a simple local chatbot.
+- **Persistence**: Fully local storage using SQLite for documents, vectors, and index metadata.
+- **KV Store**: Tracks stats and run metadata (e.g. total files, tokens, index runs).
+- **Consistency Checks**: Detect and log discrepancies in document storage/indexing.
 
 > Built using Python 3.10+, LlamaIndex, and Ollama — with some AI help 🤖
 
@@ -35,20 +35,26 @@ A local-first, privacy-conscious RAG (Retrieval-Augmented Generation) stack buil
 ---
 
 ## 🚀 Getting Started
+### 1. Clone the repository
 
-### 1. Install dependencies
+```bash
+git clone https://github.com/rinconm/rag-indexer-chat.git
+cd rag-indexer
+```
+
+### 2. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Start indexing a directory
+### 3. Start indexing a directory
 
 ```bash
 python indexer.py --dir /path/to/your/codebase
 ```
 
-### 3. Chat with your data
+### 4. Chat with your data
 
 ```bash
 python chat.py
