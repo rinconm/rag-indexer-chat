@@ -51,7 +51,7 @@ pip install -r requirements.txt
 ### 3. Start indexing a directory
 
 ```bash
-python indexer.py --dir /path/to/your/codebase
+python3 indexer.py --dir /path/to/your/codebase
 ```
 
 ### 4. Chat with your data
@@ -59,6 +59,12 @@ python indexer.py --dir /path/to/your/codebase
 ```bash
 python chat.py
 ```
+
+---
+
+## 📊 Sample Output
+
+
 
 ---
 
