@@ -1,40 +1,44 @@
-# RAG Indexer + Chat Interface
-
-A local-first, privacy-conscious RAG (Retrieval-Augmented Generation) stack built with [LlamaIndex](https://github.com/jerryjliu/llama_index), SQLite, and Python. Designed for indexing directories of source code or documentation and enabling semantic chat over your data from the terminal.
-
----
-
-## ✨ Features
-
-- **Indexing**: Parses and indexes a directory of text/code files.
-- **Embedding**: Uses HuggingFace embeddings with support for Mistral via Ollama.
-- **Chat Interface**: Interact with your indexed data through a simple local chatbot.
-- **Persistence**: Fully local storage using SQLite for documents, vectors, and index metadata.
-- **KV Store**: Tracks stats and run metadata (e.g. total files, tokens, index runs).
-- **Consistency Checks**: Detect and log discrepancies in document storage/indexing.
-
-> Built using Python 3.10+, LlamaIndex, and Ollama — with some AI help 🤖
+# RAG Indexer + Chat
+A lightweight Retrieval‑Augmented Generation (RAG) toolkit that indexes your local code/docs into SQLite, then lets you chat with the content using an LLM (default: Ollama).
 
 ---
 
-## 📁 Directory Structure
+## How it works (high‑level)
+
+1. indexer.py walks the target directory, splits files into chunks, embeds
+them with a HuggingFace model, and stores everything in index/sqlite.db
+via custom SQLite back‑ends.
+
+2. chat.py loads the index, employs a hybrid retriever (embedding + keyword
+filter), builds a prompt with retrieved context, and streams the answer from
+your local Ollama LLM.
+
+---
+
+## Directory Structure
 
 ```bash
-.
-├── indexer.py              # Main entry point for indexing a directory
-├── chat.py                 # Simple command-line chatbot using indexed data
-├── sqlite_docstore.py      # SQLite-backed Document Store
-├── sqlite_indexstore.py    # SQLite-backed Index Store
-├── sqlite_vectorstore.py   # SQLite-backed Vector Store
-├── sqlite_graphstore.py    # SQLite-backed Graph Store
-├── sqlite_kvstore.py       # Key-Value store for usage stats
-├── requirements.txt        # Python dependencies
-└── README.md               # Project overview (you are here)
+rag-indexer-chat/
+├── backend/                  # all reusable SQLite helpers
+│   ├── __init__.py
+│   ├── sqlite_kvstore.py     # key‑value store
+│   ├── sqlite_docstore.py    # docstore
+│   ├── sqlite_indexstore.py  # index meta
+│   ├── sqlite_vectorstore.py # vectors & embeddings
+│   └── sqlite_graphstore.py  # (optional) graph support
+├── indexer.py                # CLI to create / update index
+├── chat.py                   # interactive chat CLI
+├── index/                    # runtime artefacts (auto‑created)
+│   ├── sqlite.db             # single SQLite database
+│   └── .index_cache.json     # file‑modified‑time cache
+├── chat_logs/                # auto‑saved chat histories
+├── README.md                 # you are here
+└── requirements.txt          # minimal deps
 ```
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 ### 1. Clone the repository
 
 ```bash
@@ -51,43 +55,87 @@ pip install -r requirements.txt
 ### 3. Start indexing a directory
 
 ```bash
-python3 indexer.py --dir /path/to/your/codebase
+python3 indexer.py --dir /path/to/your/files
 ```
 
 ### 4. Chat with your data
 
 ```bash
-python chat.py
+python3 chat.py
 ```
 
 ---
 
-## 📊 Sample Output
+## Sample Output
+1. Indexer Help Menu
+```bash
+mrincon@DESKTOP-JIRIPVL:~/scripts/rag-indexer-chat$ python3 indexer.py -h
+usage: indexer.py [-h] [--model MODEL] [--chunk-size TOKENS] [--chunk-overlap TOKENS] [--dir PATH] [--rebuild | --purge] [--debug]
+
+Build or update a local SQLite‑backed index for RAG search.
+
+options:
+  -h, --help            show this help message and exit
+  --model MODEL         Sentence‑transformer model used for embeddings (default: all-MiniLM-L6-v2)
+  --chunk-size TOKENS   Chunk size passed to node parser (default: 512)
+  --chunk-overlap TOKENS
+                        Overlap between consecutive chunks (default: 100)
+  --dir PATH            Root directory to index (default: .)
+  --rebuild             Ignore existing index; rebuild from scratch (default: False)
+  --purge               Delete index & cache, then exit (default: False)
+  --debug               Verbose logging (default: False)
+
+Example: python3 indexer.py --dir /path/to/dir
+```
 
 
+2. Chat Help Menu
+```bash
+mrincon@DESKTOP-JIRIPVL:~/scripts/rag-indexer-chat$ python3 chat.py -h
+usage: chat.py [-h] [--llm LLM] [--embed EMBED] [--top-k N] [--chatlog CHATLOG] [--history-limit TURNS] [--verbose] [--debug] [--version]
 
+Interactive RAG chat over your local index
+
+options:
+  -h, --help            show this help message and exit
+  --llm LLM             LLM served by Ollama for final answers (default: mistral)
+  --embed EMBED         Sentence‑transformer model for embeddings (default: all-MiniLM-L6-v2)
+  --top-k N             How many chunks to retrieve per query (default: 10)
+  --chatlog CHATLOG     Path to save chat log JSON (auto‑generated if omitted) (default: None)
+  --history-limit TURNS
+                        Max QA pairs kept in rolling context (default: 20)
+  --verbose             Show full file paths in results (default: False)
+  --debug               Verbose logging (default: False)
+  --version             show program's version number and exit
 ---
 
-## ⚙️ Configuration
+3. Indexing Example
+![image](https://github.com/user-attachments/assets/b3319965-a972-4f76-8d25-22478f26e6f5)
 
-- Modify `Config` in `indexer.py` to customize paths and supported file types.
+4. Chat Example
+![image](https://github.com/user-attachments/assets/9be35bb6-66e9-408c-bde6-6eeaeaa4223a)
+
+
+## Configuration
+
+- Modify `Config` in `indexer.py` and 'chat.py' to customize paths and supported file types.
 - Embedding model defaults to `all-MiniLM-L6-v2`.
 - LLM defaults to `Ollama` with `mistral` (you must have Ollama installed and running).
 
 ---
 
-## 📚 Supported File Types
+## Supported File Types
 
 - `.py`, `.sh`, `.md`, `.txt`, `.yaml`, `.json`, `.html`, `.js`, `.ts`, `.css`, `.java`, `.cpp`, `.go`, etc.
 
 ---
 
-## 📌 License
+## License
 
 MIT License. See [LICENSE](./LICENSE) for details.
 
 ---
 
-## 🧠 Note on Authorship
+## Note on Authorship
 
 This project was built with the help of AI-assisted tools like GitHub Copilot and OpenAI's ChatGPT. Contributions welcome!
