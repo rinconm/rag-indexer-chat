@@ -107,7 +107,7 @@ options:
   --verbose             Show full file paths in results (default: False)
   --debug               Verbose logging (default: False)
   --version             show program's version number and exit
----
+```
 
 3. Indexing Example
 ![image](https://github.com/user-attachments/assets/b3319965-a972-4f76-8d25-22478f26e6f5)
@@ -115,6 +115,7 @@ options:
 4. Chat Example
 ![image](https://github.com/user-attachments/assets/9be35bb6-66e9-408c-bde6-6eeaeaa4223a)
 
+---
 
 ## Configuration
 
