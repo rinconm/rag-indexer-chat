@@ -4,7 +4,6 @@ A lightweight Retrieval‑Augmented Generation (RAG) toolkit that indexes your l
 ---
 
 ## How it works (high‑level)
-
 1. indexer.py walks the target directory, splits files into chunks, embeds
 them with a HuggingFace model, and stores everything in index/sqlite.db
 via custom SQLite back‑ends.
@@ -16,7 +15,6 @@ your local LLM.
 ---
 
 ## Directory Structure
-
 ```bash
 rag-indexer-chat/
 ├── backend/                  # all reusable SQLite helpers
