@@ -1,5 +1,5 @@
 # RAG Indexer + Chat
-A lightweight Retrieval‑Augmented Generation (RAG) toolkit that indexes your local code/docs into SQLite, then lets you chat with the content using an LLM (default: Ollama).
+A fast, local-first Retrieve-Augmented Generation (RAG) indexing system built using LlamaIndex and SQLite. Index your project files, power intelligent search, and run local chat with local LLMs (default Ollama).
 
 ---
 
