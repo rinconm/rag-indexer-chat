@@ -11,7 +11,7 @@ via custom SQLite back‑ends.
 
 2. chat.py loads the index, employs a hybrid retriever (embedding + keyword
 filter), builds a prompt with retrieved context, and streams the answer from
-your local Ollama LLM.
+your local LLM.
 
 ---
 
