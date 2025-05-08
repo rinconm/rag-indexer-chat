@@ -67,7 +67,7 @@ python3 chat.py
 ---
 
 ## Sample Output
-1. Indexer Help Menu
+### 1. Indexer Help Menu
 ```bash
 mrincon@DESKTOP-JIRIPVL:~/scripts/rag-indexer-chat$ python3 indexer.py -h
 usage: indexer.py [-h] [--model MODEL] [--chunk-size TOKENS] [--chunk-overlap TOKENS] [--dir PATH] [--rebuild | --purge] [--debug]
@@ -88,8 +88,7 @@ options:
 Example: python3 indexer.py --dir /path/to/dir
 ```
 
-
-2. Chat Help Menu
+### 2. Chat Help Menu
 ```bash
 mrincon@DESKTOP-JIRIPVL:~/scripts/rag-indexer-chat$ python3 chat.py -h
 usage: chat.py [-h] [--llm LLM] [--embed EMBED] [--top-k N] [--chatlog CHATLOG] [--history-limit TURNS] [--verbose] [--debug] [--version]
@@ -109,10 +108,12 @@ options:
   --version             show program's version number and exit
 ```
 
-3. Indexing Example
+### 3. Indexing Example
+
 ![image](https://github.com/user-attachments/assets/b3319965-a972-4f76-8d25-22478f26e6f5)
 
-4. Chat Example
+### 4. Chat Example
+
 ![image](https://github.com/user-attachments/assets/9be35bb6-66e9-408c-bde6-6eeaeaa4223a)
 
 ---
