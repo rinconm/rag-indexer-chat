@@ -1,16 +1,16 @@
 # RAG Indexer + Chat
-A fast, local-first Retrieve-Augmented Generation (RAG) indexing system built using LlamaIndex and SQLite. Index your project files, power intelligent search, and run local chat with local LLMs (default Ollama).
+A fast, local-first Retrieval-Augmented Generation (RAG) indexing system built using LlamaIndex and SQLite. Index your project files, power intelligent search, and run local chat with local LLMs (default Ollama).
 
 ---
 
 ## How it works (high‑level)
-1. indexer.py walks the target directory, splits files into chunks, embeds
-them with a HuggingFace model, and stores everything in index/sqlite.db
+1. **indexer.py** walks the target directory, splits files into chunks, embeds
+each chunk with a HuggingFace model, and stores everything in **index/sqlite.db**
 via custom SQLite back‑ends.
 
-2. chat.py loads the index, employs a hybrid retriever (embedding + keyword
-filter), builds a prompt with retrieved context, and streams the answer from
-your local LLM.
+2. **chat.py** loads the index, employs an embedded retriever (optionally filtered
+by automatic keywords), builds a prompt with retrieved context, and streams the
+answer from your local LLM.
 
 ---
 
@@ -41,12 +41,13 @@ rag-indexer-chat/
 
 ```bash
 git clone https://github.com/rinconm/rag-indexer-chat.git
-cd rag-indexer
+cd rag-indexer-chat
 ```
 
 ### 2. Install dependencies
 
 ```bash
+# Requires Python 3.9+ and Ollama running locally
 pip install -r requirements.txt
 ```
 
@@ -65,7 +66,7 @@ python3 chat.py
 ---
 
 ## Sample Output
-### 1. Indexer Help Menu
+#### Indexer Help (-h)
 ```bash
 mrincon@DESKTOP-JIRIPVL:~/scripts/rag-indexer-chat$ python3 indexer.py -h
 usage: indexer.py [-h] [--model MODEL] [--chunk-size TOKENS] [--chunk-overlap TOKENS] [--dir PATH] [--rebuild | --purge] [--debug]
@@ -86,7 +87,7 @@ options:
 Example: python3 indexer.py --dir /path/to/dir
 ```
 
-### 2. Chat Help Menu
+#### Chat Help (-h)
 ```bash
 mrincon@DESKTOP-JIRIPVL:~/scripts/rag-indexer-chat$ python3 chat.py -h
 usage: chat.py [-h] [--llm LLM] [--embed EMBED] [--top-k N] [--chatlog CHATLOG] [--history-limit TURNS] [--verbose] [--debug] [--version]
@@ -112,13 +113,13 @@ options:
 
 ### 4. Chat Example
 
-![image](https://github.com/user-attachments/assets/9be35bb6-66e9-408c-bde6-6eeaeaa4223a)
+![image](https://github.com/user-attachments/assets/033345dc-4e45-4bd8-9cca-9f6454cba9b9)
 
 ---
 
 ## Configuration
 
-- Modify `Config` in `indexer.py` and 'chat.py' to customize paths and supported file types.
+- Modify `Config` in `indexer.py` and `chat.py` to customize paths and supported file types.
 - Embedding model defaults to `all-MiniLM-L6-v2`.
 - LLM defaults to `Ollama` with `mistral` (you must have Ollama installed and running).
 
@@ -130,12 +131,6 @@ options:
 
 ---
 
-## License
-
-MIT License. See [LICENSE](./LICENSE) for details.
-
----
-
-## Note on Authorship
+## Authorship note
 
 This project was built with the help of AI-assisted tools like GitHub Copilot and OpenAI's ChatGPT. Contributions welcome!
