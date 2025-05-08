@@ -79,6 +79,40 @@ class HybridRetriever(VectorIndexRetriever):
 
         return [self._node_postprocess(r) for r in results.nodes or []]
 
+def build_arg_parser() -> argparse.ArgumentParser:
+    return argparse.ArgumentParser(
+        prog="chat.py",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description="Interactive RAG chat over your local index",
+    )
+
+def parse_args() -> argparse.Namespace:
+    parser = build_arg_parser()
+
+    # — Retrieval / generation
+    parser.add_argument("--llm",   default="mistral",
+                        help="LLM served by Ollama for final answers")
+    parser.add_argument("--embed", default="all-MiniLM-L6-v2",
+                        help="Sentence‑transformer model for embeddings")
+    parser.add_argument("--top-k", type=int, default=10,
+                        metavar="N", help="How many chunks to retrieve per query")
+
+    # — Session handling
+    parser.add_argument("--chatlog", type=Path,
+                        help="Path to save chat log JSON (auto‑generated if omitted)")
+    parser.add_argument("--history-limit", type=int, default=20,
+                        metavar="TURNS", help="Max QA pairs kept in rolling context")
+
+    # — UX / debug
+    parser.add_argument("--verbose", action="store_true",
+                        help="Show full file paths in results")
+    parser.add_argument("--debug",   action="store_true",
+                        help="Verbose logging")
+    parser.add_argument("--version", action="version",
+                        version=f"RAG Chat {Config.VERSION}")
+
+    return parser.parse_args()
+
 def configure_logging(debug: bool):
     """Configure the logging behavior."""
     logging.basicConfig(
@@ -128,7 +162,7 @@ def filename_in_query(q: str, files: set[str]) -> str | None:
     for token in FILENAME_RE.findall(q):
         if token in files:
             return token
-        return None
+    return None
 
 def get_nodes(user_input: str, filenames: set[str], indexed_nodes: List[Node], retriever: HybridRetriever) -> List[Node]:
     fname = filename_in_query(user_input, filenames)
@@ -142,7 +176,8 @@ def get_nodes(user_input: str, filenames: set[str], indexed_nodes: List[Node], r
     """Retrieve nodes from either filename match or search."""
     if user_input.strip() in filenames:
         nodes = [node for node in indexed_nodes if Path(node.metadata.get("filename", "unknown")).name == user_input.strip()]
-        console.print(f":file_folder: [cyan]Matched file:[/] {user_input.strip()} — {len(nodes)} chunk(s)")
+        if log.level == logging.DEBUG:
+            console.print(f":file_folder: [cyan]Matched file:[/] {user_input.strip()} — {len(nodes)} chunk(s)")
     else:
         nodes = retriever.retrieve(user_input)
     return nodes
@@ -346,21 +381,7 @@ def main():
     Parses command-line arguments, configures settings, 
     loads index storage, and starts the interactive chat loop.
     """
-    parser = argparse.ArgumentParser(
-        description="Chat with your local indexed files using RAG.",
-        epilog="Example: python chat.py --llm mistral --embed all-MiniLM-L6-v2 --chatlog chat.json",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    parser.add_argument("--llm", type=str, default="mistral", help="LLM model for answering")
-    parser.add_argument("--embed", type=str, default="all-MiniLM-L6-v2", help="Embedding model for retrieval")
-    parser.add_argument("--top-k", type=int, default=10, help="Top K retrieved chunks")
-    parser.add_argument("--chatlog", type=Path, help="Optional file to save chat history")
-    parser.add_argument("--history-limit", type=int, default=20, help="Max number of turns to keep in chat history")
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-    parser.add_argument("--verbose", action="store_true", help="Show full paths in retrieved context")
-    parser.add_argument("--version", action="version", version=f"RAG Chat {Config.VERSION}")
-
-    args = parser.parse_args()
+    args = parse_args()
 
     configure_logging(args.debug)
 
@@ -408,16 +429,13 @@ def main():
     file_count  = count_unique_files(indexed_nodes)
 
     startup_panel = Panel(
-        "\n".join([
             f"[bold cyan]LLM:[/] {args.llm}   "
             f"[bold cyan]Embeddings:[/] {args.embed}   "
             f"[bold cyan]Top K:[/] {args.top_k}   "
             f"[bold cyan]Docs:[/] {doc_count}   "
-            f"[bold cyan]Files:[/] {file_count}"
-            "\n",
+            f"[bold cyan]Files:[/] {file_count}\n"
             "[bold green]Chat ready!  Type [bold cyan]exit[/] to quit or [bold cyan]/help[/] for commands.",
-        ]),
-        title="[bold blue]RAG Chat Startup",
+            title="[bold blue]RAG Chat Startup",
     )
     console.print(startup_panel)
 

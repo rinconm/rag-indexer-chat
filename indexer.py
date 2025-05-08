@@ -10,13 +10,12 @@ import logging
 import argparse
 import shutil
 import sqlite3
+from textwrap import dedent
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
 from collections import Counter
 import re
-
-from llama_index.core.schema import Document
 
 from llama_index.core import (
     Document,
@@ -94,15 +93,37 @@ class SQLiteVectorStoreNoPersist(SQLiteVectorStore):
 log = logging.getLogger(__name__)
 
 def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--model", type=str, default="all-MiniLM-L6-v2", help="Embedding model to use")
-    parser.add_argument("--dir", type=str, default="/home/mrincon/scripts", help="Directory to index")
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-    parser.add_argument("--rebuild", action="store_true", help="Force rebuild index from scratch")
-    parser.add_argument("--purge", action="store_true", help="Delete index + cache and start fresh")
-    parser.add_argument("--chunk-size", type=int, default=512)
-    parser.add_argument("--chunk-overlap", type=int, default=100)
+    parser = argparse.ArgumentParser(
+        prog="indexer.py",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description=dedent("""\
+            Build or update a local SQLite‑backed index for RAG search.
+        """),
+        epilog="Example: python3 indexer.py --dir /path/to/dir"
+    )
+
+    # — Embedding / chunking
+    parser.add_argument("--model", default="all-MiniLM-L6-v2",
+                        help="Sentence‑transformer model used for embeddings")
+    parser.add_argument("--chunk-size", type=int, default=512,
+                        metavar="TOKENS", help="Chunk size passed to node parser")
+    parser.add_argument("--chunk-overlap", type=int, default=100,
+                        metavar="TOKENS", help="Overlap between consecutive chunks")
+
+    # — File system
+    parser.add_argument("--dir", default=".",
+                        metavar="PATH", help="Root directory to index")
+
+    # — House‑keeping flags
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--rebuild", action="store_true",
+                       help="Ignore existing index; rebuild from scratch")
+    group.add_argument("--purge",   action="store_true",
+                       help="Delete index & cache, then exit")
+
+    # — Misc
+    parser.add_argument("--debug", action="store_true", help="Verbose logging")
+
     return parser.parse_args()
 
 def load_file_cache(cache_path: Path) -> Dict[str, float]:
@@ -151,7 +172,7 @@ def load_new_documents(root_dir: Path, file_cache: Dict[str, float]) -> Tuple[Li
 
         # Create Document instead of Node
         new_docs.append(Document(text=f"Filename: {filepath}\n\n{content}", metadata={"filename": filepath_str, "keywords": extract_keywords(content)}))
-        log.info(f"Indexed: {filepath.relative_to(root_dir)}")
+        log.debug(f"Indexed: {filepath.relative_to(root_dir)}")
 
     log.info(f"Discovered {len(new_docs)} new/modified file(s)")
     return new_docs, updated_cache
@@ -214,6 +235,7 @@ def main() -> None:
     file_cache = load_file_cache(Config.cache_path)
     log.info(f"Loaded file cache with {len(file_cache)} entries")
 
+    new_nodes = []; deleted_files = set(); updated_cache = {}; total_tokens = 0
     start = time.perf_counter()
 
     # Load new documents unless purging (which already exited)

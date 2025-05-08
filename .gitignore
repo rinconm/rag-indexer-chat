@@ -8,9 +8,10 @@ __pycache__/
 .env
 .venv/
 
-# Index + DB artifacts
-/index/*.db
-/index/.index_cache.json
+# Runtime artifacts
+index/*.db
+index/.index_cache.json
+chat_logs/
 
 # Logs
 *.log
